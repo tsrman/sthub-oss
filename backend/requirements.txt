@@ -10,7 +10,7 @@ httpx==0.28.1
 docker==7.2.0
 # Runtime dependency, not a dev tool: app/services/lint_service.py shells out to
 # ruff to syntax-check user code for the /lint endpoint.
-ruff==0.15.20
+ruff==0.16.1
 python-multipart==0.0.32
 arq==0.28.0
 redis==5.3.1
