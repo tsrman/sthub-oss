@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 import tomllib
 from unittest import TestCase
 
+from scripts import check_release
 from scripts.check_release import (
     check_markdown_links,
     check_required_files,
@@ -176,6 +177,56 @@ class ReleaseHygieneTests(TestCase):
         self.assertIn("docs/api-contract.md", missing)
         self.assertIn(".github/dependabot.yml", missing)
         self.assertIn("frontend/public/monaco-editor/ThirdPartyNotices.txt", missing)
+        self.assertIn("streamlit-base/requirements.txt", missing)
+
+    def test_exposes_streamlit_base_dependency_checker(self):
+        self.assertTrue(hasattr(check_release, "check_streamlit_base_dependencies"))
+
+    def test_rejects_unpinned_and_vulnerable_streamlit_base_dependencies(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "streamlit-base").mkdir()
+            (root / "streamlit-base" / "requirements.txt").write_text(
+                "streamlit==1.39.0\nrequests>=2.33.0\n",
+                encoding="utf-8",
+            )
+            (root / "streamlit-base" / "Dockerfile").write_text(
+                "FROM python:3.12-slim\nRUN pip install streamlit\n",
+                encoding="utf-8",
+            )
+
+            findings = check_release.check_streamlit_base_dependencies(root)
+
+        reasons = {finding.reason for finding in findings}
+        self.assertIn("dependency must use an exact == pin: requests>=2.33.0", reasons)
+        self.assertIn("streamlit 1.39.0 is below the safe minimum 1.54.0", reasons)
+        self.assertIn("Dockerfile must copy streamlit-base/requirements.txt", reasons)
+        self.assertIn("Dockerfile must install streamlit-base/requirements.txt", reasons)
+
+    def test_accepts_exact_safe_streamlit_base_dependencies(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "streamlit-base").mkdir()
+            (root / "streamlit-base" / "requirements.txt").write_text(
+                "\n".join(
+                    [
+                        "streamlit==1.54.0",
+                        "requests==2.33.0",
+                        "pyarrow==23.0.1",
+                        "python-dotenv==1.2.2",
+                        "pillow==12.3.0",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            (root / "streamlit-base" / "Dockerfile").write_text(
+                "COPY requirements.txt /tmp/requirements.txt\n"
+                "RUN pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release.check_streamlit_base_dependencies(root), [])
 
     def test_reports_settings_absent_from_the_sample_environment(self):
         """An operator can only discover a setting if .env.example names it."""

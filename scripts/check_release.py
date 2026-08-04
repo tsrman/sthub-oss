@@ -93,6 +93,20 @@ REQUIRED_PUBLIC_FILES = {
     "frontend/public/monaco-editor/ThirdPartyNotices.txt",
     ".github/dependabot.yml",
     ".github/pull_request_template.md",
+    "streamlit-base/requirements.txt",
+}
+
+_BASE_REQUIREMENTS = "streamlit-base/requirements.txt"
+_BASE_DOCKERFILE = "streamlit-base/Dockerfile"
+_EXACT_REQUIREMENT = re.compile(
+    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)==(?P<version>[0-9]+(?:\.[0-9]+)*)$"
+)
+_SAFE_BASE_MINIMUMS = {
+    "streamlit": "1.54.0",
+    "requests": "2.33.0",
+    "pyarrow": "23.0.1",
+    "python-dotenv": "1.2.2",
+    "pillow": "12.3.0",
 }
 
 _MARKDOWN_LINK = re.compile(
@@ -257,6 +271,66 @@ def check_required_files(root: Path) -> list[Finding]:
         for relative in sorted(REQUIRED_PUBLIC_FILES)
         if not (root / relative).is_file()
     ]
+
+
+def _normalized_package_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _numeric_version(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split("."))
+
+
+def check_streamlit_base_dependencies(root: Path) -> list[Finding]:
+    root = root.resolve()
+    requirements = root / _BASE_REQUIREMENTS
+    dockerfile = root / _BASE_DOCKERFILE
+    if not requirements.is_file():
+        return []
+
+    findings: list[Finding] = []
+    versions: dict[str, str] = {}
+    for line_number, raw_line in enumerate(
+        requirements.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _EXACT_REQUIREMENT.fullmatch(line)
+        if match is None:
+            findings.append(
+                Finding(
+                    _BASE_REQUIREMENTS,
+                    f"dependency must use an exact == pin: {line}",
+                    line_number,
+                )
+            )
+            continue
+        versions[_normalized_package_name(match.group("name"))] = match.group("version")
+
+    for name, minimum in _SAFE_BASE_MINIMUMS.items():
+        found = versions.get(name)
+        if found is None:
+            findings.append(Finding(_BASE_REQUIREMENTS, f"missing security dependency: {name}"))
+        elif _numeric_version(found) < _numeric_version(minimum):
+            findings.append(
+                Finding(
+                    _BASE_REQUIREMENTS,
+                    f"{name} {found} is below the safe minimum {minimum}",
+                )
+            )
+
+    if dockerfile.is_file():
+        docker_text = dockerfile.read_text(encoding="utf-8")
+        if "COPY requirements.txt /tmp/requirements.txt" not in docker_text:
+            findings.append(
+                Finding(_BASE_DOCKERFILE, "Dockerfile must copy streamlit-base/requirements.txt")
+            )
+        if "-r /tmp/requirements.txt" not in docker_text:
+            findings.append(
+                Finding(_BASE_DOCKERFILE, "Dockerfile must install streamlit-base/requirements.txt")
+            )
+    return findings
 
 
 _SETTINGS_SOURCE = "backend/app/config.py"
@@ -434,6 +508,7 @@ def main() -> int:
 
     findings = scan_tree(args.root, tracked_only=False if args.all_files else None)
     findings.extend(check_required_files(args.root))
+    findings.extend(check_streamlit_base_dependencies(args.root))
     findings.extend(check_settings_documented(args.root))
     findings.extend(check_versions_aligned(args.root))
     findings.extend(check_markdown_links(args.root))
