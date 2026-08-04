@@ -3,6 +3,11 @@ updates:
   - package-ecosystem: pip
     directory: /backend
     schedule: {interval: weekly}
+    ignore:
+      # arq 0.28.0 requires redis[hiredis]<6, so a redis major cannot resolve
+      # here at all. Drop this once arq widens the constraint upstream.
+      - dependency-name: redis
+        update-types: [version-update:semver-major]
   - package-ecosystem: pip
     directory: /streamlit-base
     schedule: {interval: weekly}
