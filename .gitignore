@@ -20,5 +20,6 @@ coverage/
 test-results/
 playwright-report/
 .auth/
+.worktrees/
 *.tsbuildinfo
 .DS_Store
