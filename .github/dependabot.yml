@@ -3,6 +3,9 @@ updates:
   - package-ecosystem: pip
     directory: /backend
     schedule: {interval: weekly}
+  - package-ecosystem: pip
+    directory: /streamlit-base
+    schedule: {interval: weekly}
   # Base images in the Dockerfiles. Note this does not cover the service image
   # tags in compose.yaml / compose.tls.yaml — review those by hand on upgrades.
   - package-ecosystem: docker

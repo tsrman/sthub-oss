@@ -333,6 +333,29 @@ def check_streamlit_base_dependencies(root: Path) -> list[Finding]:
     return findings
 
 
+def check_dependency_security_automation(root: Path) -> list[Finding]:
+    root = root.resolve()
+    dependabot = root / ".github" / "dependabot.yml"
+    ci = root / ".github" / "workflows" / "ci.yml"
+    findings: list[Finding] = []
+    dependabot_text = dependabot.read_text(encoding="utf-8") if dependabot.is_file() else ""
+    ci_text = ci.read_text(encoding="utf-8") if ci.is_file() else ""
+
+    if not (
+        "package-ecosystem: pip" in dependabot_text
+        and "directory: /streamlit-base" in dependabot_text
+    ):
+        findings.append(Finding(".github/dependabot.yml", "Dependabot must scan /streamlit-base as pip"))
+    if "pip-audit==2.10.1" not in ci_text:
+        findings.append(Finding(".github/workflows/ci.yml", "CI must pin pip-audit==2.10.1"))
+    for requirement_path in ("backend/requirements.txt", "streamlit-base/requirements.txt"):
+        if f"pip-audit -r {requirement_path}" not in ci_text:
+            findings.append(
+                Finding(".github/workflows/ci.yml", f"CI must audit {requirement_path}")
+            )
+    return findings
+
+
 _SETTINGS_SOURCE = "backend/app/config.py"
 _ENV_EXAMPLE = ".env.example"
 _ENV_ASSIGNMENT = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)\s*=")
@@ -509,6 +532,7 @@ def main() -> int:
     findings = scan_tree(args.root, tracked_only=False if args.all_files else None)
     findings.extend(check_required_files(args.root))
     findings.extend(check_streamlit_base_dependencies(args.root))
+    findings.extend(check_dependency_security_automation(args.root))
     findings.extend(check_settings_documented(args.root))
     findings.extend(check_versions_aligned(args.root))
     findings.extend(check_markdown_links(args.root))

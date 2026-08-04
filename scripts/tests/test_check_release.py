@@ -182,6 +182,45 @@ class ReleaseHygieneTests(TestCase):
     def test_exposes_streamlit_base_dependency_checker(self):
         self.assertTrue(hasattr(check_release, "check_streamlit_base_dependencies"))
 
+    def test_exposes_dependency_security_automation_checker(self):
+        self.assertTrue(hasattr(check_release, "check_dependency_security_automation"))
+
+    def test_reports_missing_streamlit_base_dependency_automation(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "dependabot.yml").write_text(
+                "version: 2\nupdates: []\n", encoding="utf-8"
+            )
+            (root / ".github" / "workflows" / "ci.yml").write_text(
+                "name: CI\n", encoding="utf-8"
+            )
+
+            findings = check_release.check_dependency_security_automation(root)
+
+        reasons = {finding.reason for finding in findings}
+        self.assertIn("Dependabot must scan /streamlit-base as pip", reasons)
+        self.assertIn("CI must pin pip-audit==2.10.1", reasons)
+        self.assertIn("CI must audit backend/requirements.txt", reasons)
+        self.assertIn("CI must audit streamlit-base/requirements.txt", reasons)
+
+    def test_accepts_complete_streamlit_base_dependency_automation(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".github" / "workflows").mkdir(parents=True)
+            (root / ".github" / "dependabot.yml").write_text(
+                "package-ecosystem: pip\ndirectory: /streamlit-base\n",
+                encoding="utf-8",
+            )
+            (root / ".github" / "workflows" / "ci.yml").write_text(
+                "pip-audit==2.10.1\n"
+                "pip-audit -r backend/requirements.txt\n"
+                "pip-audit -r streamlit-base/requirements.txt\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(check_release.check_dependency_security_automation(root), [])
+
     def test_rejects_unpinned_and_vulnerable_streamlit_base_dependencies(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
