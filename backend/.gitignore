@@ -1,0 +1,9 @@
+# Coverage artifacts
+.coverage
+coverage.xml
+htmlcov/
+
+# Caches
+.pytest_cache/
+.ruff_cache/
+__pycache__/

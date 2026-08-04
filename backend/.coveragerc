@@ -1,0 +1,5 @@
+[run]
+source = app
+omit =
+    app/worker/__main__.py
+    app/alembic/*

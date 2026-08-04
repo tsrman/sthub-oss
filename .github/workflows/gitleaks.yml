@@ -1,0 +1,34 @@
+name: Gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Scan pull request commits
+        if: github.event_name == 'pull_request'
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --config /repo/.gitleaks.toml --source /repo --redact --no-banner \
+            --log-opts="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+      - name: Scan push history
+        if: github.event_name == 'push'
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            detect --config /repo/.gitleaks.toml --source /repo --redact --no-banner

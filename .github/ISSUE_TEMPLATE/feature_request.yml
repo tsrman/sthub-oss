@@ -1,0 +1,19 @@
+name: Feature request
+description: Propose an improvement.
+body:
+  - type: textarea
+    id: problem
+    attributes: {label: Problem}
+    validations: {required: true}
+  - type: textarea
+    id: outcome
+    attributes: {label: Proposed outcome}
+    validations: {required: true}
+  - type: textarea
+    id: alternatives
+    attributes: {label: Alternatives}
+    validations: {required: true}
+  - type: textarea
+    id: deployment
+    attributes: {label: Deployment impact}
+    validations: {required: true}

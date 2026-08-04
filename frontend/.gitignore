@@ -1,0 +1,6 @@
+
+# TS incremental build info
+tsconfig.tsbuildinfo
+
+# Vitest coverage output
+coverage/

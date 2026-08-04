@@ -1,0 +1,224 @@
+# TLS sample: Traefik is the sole host-facing service and publishes only 443.
+# Local credentials are development-only; do not reuse them in a shared environment.
+#
+# Quick start:
+#   cp .env.example .env
+#   ./certs/generate-certs.sh
+#   docker build -t streamlit-base:latest ./streamlit-base --build-arg BASE_IMAGE=python:3.12-slim
+#   docker compose -f compose.tls.yaml up --build
+#
+# Open https://localhost/ and trust certs/local.crt to remove the browser warning.
+
+services:
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.filename=/etc/traefik/dynamic.tls.yml"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.tls=true"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+    ports:
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic.tls.yml:/etc/traefik/dynamic.tls.yml:ro
+      - ./certs:/certs:ro
+    networks:
+      - control-plane
+      - streamlit-limited
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: streamlit_registry
+      POSTGRES_USER: streamlit
+      # WARNING: development-only database password; change it for shared use.
+      POSTGRES_PASSWORD: streamlit
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    networks:
+      - control-plane
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U streamlit -d streamlit_registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - control-plane
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      # WARNING: development-only admin credentials; change both for shared use.
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_PORT: "8080"
+      KC_HOSTNAME: https://localhost/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_ENABLED: "true"
+    volumes:
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${CONTROL_NETWORK:-sthub-control}"
+      - "traefik.http.routers.keycloak.rule=PathPrefix(`/auth`)"
+      - "traefik.http.routers.keycloak.entrypoints=websecure"
+      - "traefik.http.routers.keycloak.priority=30"
+      - "traefik.http.routers.keycloak.middlewares=security-headers@file"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+    networks:
+      - control-plane
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 2 bash -c '</dev/tcp/127.0.0.1/8080'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: python:3.12-slim
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      KEYCLOAK_URL: http://keycloak:8080/auth
+      KEYCLOAK_PUBLIC_URL: https://localhost/auth
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM}
+      KEYCLOAK_CLIENT: ${KEYCLOAK_CLIENT}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_ALLOWED_GROUPS: ${KEYCLOAK_ALLOWED_GROUPS}
+      KEYCLOAK_ADMIN_GROUP: ${KEYCLOAK_ADMIN_GROUP}
+      KEYCLOAK_VERIFY_SSL: ${KEYCLOAK_VERIFY_SSL}
+      REDIS_URL: ${REDIS_URL}
+      ARQ_QUEUE_NAME: ${ARQ_QUEUE_NAME}
+      DOCKER_NETWORK: ${DOCKER_NETWORK}
+      STREAMLIT_BASE_IMAGE: ${STREAMLIT_BASE_IMAGE}
+      TRAEFIK_ENTRYPOINT: websecure
+      CONTAINER_MEMORY: ${CONTAINER_MEMORY}
+      CONTAINER_MEMORY_RESERVATION: ${CONTAINER_MEMORY_RESERVATION}
+      CONTAINER_CPU_QUOTA: ${CONTAINER_CPU_QUOTA}
+      CONTAINER_CPU_PERIOD: ${CONTAINER_CPU_PERIOD}
+      CONTAINER_PIDS_LIMIT: ${CONTAINER_PIDS_LIMIT}
+      CONTAINER_TMPFS_SIZE: ${CONTAINER_TMPFS_SIZE}
+      CONTAINER_TMPFS_RUNTIME_SIZE: ${CONTAINER_TMPFS_RUNTIME_SIZE}
+      ALLOWED_PACKAGES: ${ALLOWED_PACKAGES}
+      MAX_RUNNING_APPS_PER_USER: ${MAX_RUNNING_APPS_PER_USER}
+      MAX_FILES_PER_STREAMLIT: ${MAX_FILES_PER_STREAMLIT}
+      MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES}
+      MAX_CODE_SIZE: ${MAX_CODE_SIZE}
+      MAX_REQUIREMENTS_SIZE: ${MAX_REQUIREMENTS_SIZE}
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      PUBLIC_HOST: ${PUBLIC_HOST}
+      # AI stays backend-only and is disabled unless a self-hosted OpenAI-compatible gateway is configured.
+      AI_ENABLED: ${AI_ENABLED}
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_MODEL: ${AI_MODEL}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS}
+      AI_TIMEOUT: ${AI_TIMEOUT}
+      AI_CA_CERT: ${AI_CA_CERT}
+      AI_VERIFY_SSL: ${AI_VERIFY_SSL}
+      AI_MAX_CONTEXT_CHARS: ${AI_MAX_CONTEXT_CHARS}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${CONTROL_NETWORK:-sthub-control}"
+      - "traefik.http.routers.backend.rule=PathPrefix(`/api/`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.priority=20"
+      - "traefik.http.routers.backend.middlewares=security-headers@file"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+    networks:
+      - control-plane
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+      args:
+        BASE_IMAGE: python:3.12-slim
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      ARQ_QUEUE_NAME: ${ARQ_QUEUE_NAME}
+      WORKER_MAX_JOBS: ${WORKER_MAX_JOBS}
+      WORKER_JOB_TIMEOUT: ${WORKER_JOB_TIMEOUT}
+      DOCKER_HOST: ${DOCKER_HOST}
+      DOCKER_NETWORK: ${DOCKER_NETWORK}
+      TRAEFIK_ENTRYPOINT: websecure
+      STREAMLIT_BASE_IMAGE: ${STREAMLIT_BASE_IMAGE}
+      CONTAINER_MEMORY: ${CONTAINER_MEMORY}
+      CONTAINER_MEMORY_RESERVATION: ${CONTAINER_MEMORY_RESERVATION}
+      CONTAINER_CPU_QUOTA: ${CONTAINER_CPU_QUOTA}
+      CONTAINER_CPU_PERIOD: ${CONTAINER_CPU_PERIOD}
+      CONTAINER_PIDS_LIMIT: ${CONTAINER_PIDS_LIMIT}
+      CONTAINER_TMPFS_SIZE: ${CONTAINER_TMPFS_SIZE}
+      CONTAINER_TMPFS_RUNTIME_SIZE: ${CONTAINER_TMPFS_RUNTIME_SIZE}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - control-plane
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        IMAGE: node:20-alpine
+        NEXT_PUBLIC_API_URL: /api/v1
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${CONTROL_NETWORK:-sthub-control}"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.priority=10"
+      - "traefik.http.routers.frontend.middlewares=security-headers@file"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    networks:
+      - control-plane
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+
+networks:
+  control-plane:
+    name: ${CONTROL_NETWORK:-sthub-control}
+  streamlit-limited:
+    name: ${DOCKER_NETWORK:-streamlit-limited}

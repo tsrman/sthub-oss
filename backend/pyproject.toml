@@ -1,0 +1,13 @@
+[project]
+name = "sthub-backend"
+version = "0.1.0"
+description = "STHub control API and Docker worker"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+
+[tool.ruff]
+# Pins what the tree is already formatted and linted against, so a contributor
+# on a different ruff version gets the same result as CI. Widening `lint.select`
+# is a deliberate, separate change — it currently reports ~159 findings.
+line-length = 88
+target-version = "py312"

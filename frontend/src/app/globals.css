@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --surface-3: #eef0f4;
+  --border: #e6e8ef;
+  --border-soft: #f0f1f5;
+  --text: #23262b;
+  --text-2: #5b6478;
+  --text-3: #8a93a6;
+  --muted: #9aa3b2;
+  --code-fg: #2b303b;
+  --accent: #ffb635;
+  --accent-ink: #373936;
+  --accent-soft: #fff3dc;
+  --chip-on: #ffffff;
+  --ok-fg: #00735e;
+  --ok-bg: #e2f1ed;
+  --err-fg: #9c1a3e;
+  --err-bg: #fae3ea;
+  --warn-fg: #b34c00;
+  --warn-bg: #ffeede;
+
+  /* status dots */
+  --status-running-dot: var(--ok-fg);
+  --status-stopped-dot: var(--muted);
+  --status-building-dot: var(--warn-fg);
+  --status-error-dot: var(--err-fg);
+
+  /* terminal / logs (dark blue, matches prototype) */
+  --logs-bg: #0e1320;
+  --logs-header: #11172a;
+  --logs-toolbar: #0f1525;
+  --logs-fg: #eef2fb;
+  --logs-surface: #141b2e;
+  --logs-chip-group: #1a2238;
+  --logs-border: #1e2740;
+  --logs-input-border: #2a3550;
+  --logs-line: #1a2238;
+  --logs-muted: #6b7794;
+}
+
+.dark {
+  --bg: #15171a;
+  --surface: #1f2220;
+  --surface-2: #191b19;
+  --surface-3: #2a2d2a;
+  --border: #363a37;
+  --border-soft: #2c302d;
+  --text: #f3f4f2;
+  --text-2: #bcc1bd;
+  --text-3: #8f958f;
+  --muted: #7c827d;
+  --code-fg: #e6e8e4;
+  --accent: #ffb635;
+  --accent-ink: #373936;
+  --accent-soft: #3a3320;
+  --chip-on: #2f332f;
+  --ok-fg: #3fc9a6;
+  --ok-bg: #15332b;
+  --err-fg: #f07a98;
+  --err-bg: #3a1320;
+  --warn-fg: #ff9d4d;
+  --warn-bg: #3a2a12;
+
+  --status-running-dot: var(--ok-fg);
+  --status-stopped-dot: var(--muted);
+  --status-building-dot: var(--warn-fg);
+  --status-error-dot: var(--err-fg);
+
+  --logs-bg: #0e0f11;
+  --logs-fg: #e8e8e8;
+  --logs-surface: #1b1d20;
+  --logs-border: #2a2c2e;
+  --logs-line: #1a1b1d;
+  --logs-muted: #6c6f74;
+}
+
+html,
+body {
+  min-height: 100vh;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}

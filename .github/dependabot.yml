@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule: {interval: weekly}
+  # Base images in the Dockerfiles. Note this does not cover the service image
+  # tags in compose.yaml / compose.tls.yaml — review those by hand on upgrades.
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+      - /streamlit-base
+    schedule: {interval: weekly}
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: {interval: weekly}
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule: {interval: weekly}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly}

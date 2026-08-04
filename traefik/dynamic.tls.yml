@@ -1,0 +1,23 @@
+# Traefik dynamic configuration (file provider) for the HTTPS sample stack.
+# Supplies the default certificate used for every router on the `websecure`
+# entrypoint. The cert/key are bind-mounted from certs/ (see compose.tls.yaml).
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/local.crt
+        keyFile: /certs/local.key
+  options:
+    default:
+      minVersion: VersionTLS12
+
+# Security headers middleware, attached to the keycloak/backend/frontend
+# routers via the `security-headers@file` label in compose.tls.yaml.
+http:
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 15552000
+        contentTypeNosniff: true
+        frameDeny: true
+        referrerPolicy: "no-referrer-when-downgrade"

@@ -1,0 +1,18 @@
+ARG BASE_IMAGE=python:3.12-slim
+FROM ${BASE_IMAGE}
+
+# NOTE: intentionally runs as root — the worker needs rw access to the
+# bind-mounted /var/run/docker.sock, and the host docker-group GID is not
+# portable, so a non-root user cannot be granted access reliably.
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+
+COPY app/ ./app/
+COPY alembic.ini alembic.ini
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "app.worker"]

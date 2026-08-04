@@ -1,0 +1,10 @@
+title = "STHub Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored Monaco minified bundle"
+paths = [
+  '''^(?:/repo/)?frontend/public/monaco-editor/min/vs/.*\.js$''',
+]

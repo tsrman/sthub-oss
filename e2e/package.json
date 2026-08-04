@@ -1,0 +1,13 @@
+{
+  "name": "sthub-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "playwright test",
+    "screenshot": "node capture-screenshot.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

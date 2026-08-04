@@ -1,0 +1,4 @@
+# Preserve upstream notice text byte-for-byte; their source whitespace is intentional.
+frontend/public/monaco-editor/ThirdPartyNotices.txt -text whitespace=-blank-at-eof
+third_party/licenses/CC-BY-4.0.txt whitespace=-trailing-space
+third_party/licenses/MPL-2.0.txt whitespace=-trailing-space
