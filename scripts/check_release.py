@@ -98,9 +98,18 @@ REQUIRED_PUBLIC_FILES = {
 
 _BASE_REQUIREMENTS = "streamlit-base/requirements.txt"
 _BASE_DOCKERFILE = "streamlit-base/Dockerfile"
+# A pin may carry a PEP 440 suffix (12.3.0.post1), an environment marker, or a
+# trailing comment and still be exact; only the comparison operator decides.
 _EXACT_REQUIREMENT = re.compile(
-    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)==(?P<version>[0-9]+(?:\.[0-9]+)*)$"
+    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]*)"
+    # `*` is excluded so `==1.26.*` stays a prefix match, not an exact pin.
+    r"\s*==\s*(?P<version>[0-9][^\s;#*]*)"
+    r"(?:\s*;[^#]*)?$"
 )
+_INLINE_COMMENT = re.compile(r"\s+#.*$")
+_VERSION_RELEASE = re.compile(r"^(?P<release>[0-9]+(?:\.[0-9]+)*)(?P<suffix>.*)$")
+_PRE_RELEASE = re.compile(r"^[._-]?(?:a|b|c|rc|alpha|beta|pre|preview)", re.IGNORECASE)
+_PINNED_PIP_AUDIT = re.compile(r"\bpip-audit==[0-9][^\s\"']*")
 _SAFE_BASE_MINIMUMS = {
     "streamlit": "1.54.0",
     "requests": "2.33.0",
@@ -277,8 +286,30 @@ def _normalized_package_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _numeric_version(version: str) -> tuple[int, ...]:
-    return tuple(int(part) for part in version.split("."))
+def _comparable_version(version: str) -> tuple[tuple[int, ...], int]:
+    """Split a version into its numeric release and a pre-release rank.
+
+    Full PEP 440 ordering would need `packaging`, and this checker is deliberately
+    standard-library only. Ranking a pre-release below its own release is the one
+    part of that ordering a security floor actually depends on: ``23.0.1rc1``
+    predates the fix that shipped in ``23.0.1``.
+    """
+    match = _VERSION_RELEASE.match(version)
+    if match is None:
+        return ((), 0)
+    release = tuple(int(part) for part in match.group("release").split("."))
+    return release, -1 if _PRE_RELEASE.match(match.group("suffix")) else 0
+
+
+def _below_minimum(found: str, minimum: str) -> bool:
+    found_release, found_rank = _comparable_version(found)
+    minimum_release, minimum_rank = _comparable_version(minimum)
+    width = max(len(found_release), len(minimum_release))
+
+    def padded(release: tuple[int, ...]) -> tuple[int, ...]:
+        return release + (0,) * (width - len(release))
+
+    return (padded(found_release), found_rank) < (padded(minimum_release), minimum_rank)
 
 
 def check_streamlit_base_dependencies(root: Path) -> list[Finding]:
@@ -293,7 +324,7 @@ def check_streamlit_base_dependencies(root: Path) -> list[Finding]:
     for line_number, raw_line in enumerate(
         requirements.read_text(encoding="utf-8").splitlines(), start=1
     ):
-        line = raw_line.strip()
+        line = _INLINE_COMMENT.sub("", raw_line).strip()
         if not line or line.startswith("#"):
             continue
         match = _EXACT_REQUIREMENT.fullmatch(line)
@@ -312,7 +343,7 @@ def check_streamlit_base_dependencies(root: Path) -> list[Finding]:
         found = versions.get(name)
         if found is None:
             findings.append(Finding(_BASE_REQUIREMENTS, f"missing security dependency: {name}"))
-        elif _numeric_version(found) < _numeric_version(minimum):
+        elif _below_minimum(found, minimum):
             findings.append(
                 Finding(
                     _BASE_REQUIREMENTS,
@@ -346,8 +377,12 @@ def check_dependency_security_automation(root: Path) -> list[Finding]:
         and "directory: /streamlit-base" in dependabot_text
     ):
         findings.append(Finding(".github/dependabot.yml", "Dependabot must scan /streamlit-base as pip"))
-    if "pip-audit==2.10.1" not in ci_text:
-        findings.append(Finding(".github/workflows/ci.yml", "CI must pin pip-audit==2.10.1"))
+    # The auditor must be pinned so a release is reproducible, but pinning *which*
+    # version here would make this gate reject its own upgrade.
+    if _PINNED_PIP_AUDIT.search(ci_text) is None:
+        findings.append(
+            Finding(".github/workflows/ci.yml", "CI must install a pinned pip-audit==<version>")
+        )
     for requirement_path in ("backend/requirements.txt", "streamlit-base/requirements.txt"):
         if f"pip-audit -r {requirement_path}" not in ci_text:
             findings.append(

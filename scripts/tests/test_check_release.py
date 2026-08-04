@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 from tempfile import TemporaryDirectory
 import tomllib
 from unittest import TestCase
@@ -179,12 +178,6 @@ class ReleaseHygieneTests(TestCase):
         self.assertIn("frontend/public/monaco-editor/ThirdPartyNotices.txt", missing)
         self.assertIn("streamlit-base/requirements.txt", missing)
 
-    def test_exposes_streamlit_base_dependency_checker(self):
-        self.assertTrue(hasattr(check_release, "check_streamlit_base_dependencies"))
-
-    def test_exposes_dependency_security_automation_checker(self):
-        self.assertTrue(hasattr(check_release, "check_dependency_security_automation"))
-
     def test_reports_missing_streamlit_base_dependency_automation(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -200,33 +193,53 @@ class ReleaseHygieneTests(TestCase):
 
         reasons = {finding.reason for finding in findings}
         self.assertIn("Dependabot must scan /streamlit-base as pip", reasons)
-        self.assertIn("CI must pin pip-audit==2.10.1", reasons)
+        self.assertIn("CI must install a pinned pip-audit==<version>", reasons)
         self.assertIn("CI must audit backend/requirements.txt", reasons)
         self.assertIn("CI must audit streamlit-base/requirements.txt", reasons)
 
+    def _automation_root(self, tmp: str, auditor: str) -> Path:
+        root = Path(tmp)
+        (root / ".github" / "workflows").mkdir(parents=True)
+        (root / ".github" / "dependabot.yml").write_text(
+            "package-ecosystem: pip\ndirectory: /streamlit-base\n",
+            encoding="utf-8",
+        )
+        (root / ".github" / "workflows" / "ci.yml").write_text(
+            f"python -m pip install {auditor}\n"
+            "pip-audit -r backend/requirements.txt\n"
+            "pip-audit -r streamlit-base/requirements.txt\n",
+            encoding="utf-8",
+        )
+        return root
+
     def test_accepts_complete_streamlit_base_dependency_automation(self):
         with TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / ".github" / "workflows").mkdir(parents=True)
-            (root / ".github" / "dependabot.yml").write_text(
-                "package-ecosystem: pip\ndirectory: /streamlit-base\n",
-                encoding="utf-8",
-            )
-            (root / ".github" / "workflows" / "ci.yml").write_text(
-                "pip-audit==2.10.1\n"
-                "pip-audit -r backend/requirements.txt\n"
-                "pip-audit -r streamlit-base/requirements.txt\n",
-                encoding="utf-8",
-            )
+            root = self._automation_root(tmp, "pip-audit==2.10.1")
 
             self.assertEqual(check_release.check_dependency_security_automation(root), [])
+
+    def test_accepts_a_pip_audit_upgrade(self):
+        """Pinning a specific auditor version here would block its own upgrade."""
+        with TemporaryDirectory() as tmp:
+            root = self._automation_root(tmp, "pip-audit==2.11.0")
+
+            self.assertEqual(check_release.check_dependency_security_automation(root), [])
+
+    def test_rejects_an_unpinned_pip_audit(self):
+        with TemporaryDirectory() as tmp:
+            root = self._automation_root(tmp, "pip-audit")
+
+            findings = check_release.check_dependency_security_automation(root)
+
+        reasons = {finding.reason for finding in findings}
+        self.assertIn("CI must install a pinned pip-audit==<version>", reasons)
 
     def test_rejects_unpinned_and_vulnerable_streamlit_base_dependencies(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "streamlit-base").mkdir()
             (root / "streamlit-base" / "requirements.txt").write_text(
-                "streamlit==1.39.0\nrequests>=2.33.0\n",
+                "streamlit==1.39.0\nrequests>=2.33.0\nnumpy==1.26.*\n",
                 encoding="utf-8",
             )
             (root / "streamlit-base" / "Dockerfile").write_text(
@@ -238,6 +251,7 @@ class ReleaseHygieneTests(TestCase):
 
         reasons = {finding.reason for finding in findings}
         self.assertIn("dependency must use an exact == pin: requests>=2.33.0", reasons)
+        self.assertIn("dependency must use an exact == pin: numpy==1.26.*", reasons)
         self.assertIn("streamlit 1.39.0 is below the safe minimum 1.54.0", reasons)
         self.assertIn("Dockerfile must copy streamlit-base/requirements.txt", reasons)
         self.assertIn("Dockerfile must install streamlit-base/requirements.txt", reasons)
@@ -266,6 +280,55 @@ class ReleaseHygieneTests(TestCase):
             )
 
             self.assertEqual(check_release.check_streamlit_base_dependencies(root), [])
+
+    def _base_dependencies(self, tmp: str, requirements: str) -> list:
+        root = Path(tmp)
+        (root / "streamlit-base").mkdir()
+        (root / "streamlit-base" / "requirements.txt").write_text(
+            requirements, encoding="utf-8"
+        )
+        (root / "streamlit-base" / "Dockerfile").write_text(
+            "COPY requirements.txt /tmp/requirements.txt\n"
+            "RUN pip install -r /tmp/requirements.txt\n",
+            encoding="utf-8",
+        )
+        return check_release.check_streamlit_base_dependencies(root)
+
+    def test_accepts_pins_carrying_suffixes_markers_and_comments(self):
+        """These are all exact pins; only the operator decides, not the notation."""
+        with TemporaryDirectory() as tmp:
+            findings = self._base_dependencies(
+                tmp,
+                "streamlit==1.54.0  # audited for CVE coverage\n"
+                "requests==2.33.0 ; python_version >= '3.9'\n"
+                "pyarrow==23.0.1\n"
+                "python-dotenv==1.2.2\n"
+                "pillow==12.3.0.post1\n",
+            )
+
+        self.assertEqual(findings, [])
+
+    def test_rejects_a_pre_release_of_the_fixed_version(self):
+        """23.0.1rc1 predates the fix that shipped in 23.0.1."""
+        with TemporaryDirectory() as tmp:
+            findings = self._base_dependencies(
+                tmp,
+                "streamlit==1.54.0\nrequests==2.33.0\npyarrow==23.0.1rc1\n"
+                "python-dotenv==1.2.2\npillow==12.3.0\n",
+            )
+
+        reasons = {finding.reason for finding in findings}
+        self.assertIn("pyarrow 23.0.1rc1 is below the safe minimum 23.0.1", reasons)
+
+    def test_accepts_a_shorter_release_that_meets_the_floor(self):
+        with TemporaryDirectory() as tmp:
+            findings = self._base_dependencies(
+                tmp,
+                "streamlit==1.54\nrequests==2.33.0\npyarrow==23.0.1\n"
+                "python-dotenv==1.2.2\npillow==12.3.0\n",
+            )
+
+        self.assertEqual(findings, [])
 
     def test_reports_settings_absent_from_the_sample_environment(self):
         """An operator can only discover a setting if .env.example names it."""
