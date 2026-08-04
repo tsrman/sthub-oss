@@ -41,6 +41,8 @@ Open <http://localhost:3001>. Fixture accounts are **local-only**: `testuser` / 
 
 [Architecture](docs/architecture.md) · [Configuration](docs/configuration.md) · [API contract](docs/api-contract.md) · [Deployment](docs/deployment.md) · [Development](docs/development.md) · [E2E tests](e2e/README.md)
 
+Design rationale for individual changes lives under `docs/designs/`, starting with [Streamlit base dependency security](docs/designs/2026-08-04-streamlit-base-dependency-security-design.md).
+
 ## Deployment scope
 
 STHub supports one self-hosted Docker host. Kubernetes, Swarm, multi-host orchestration, and HA services are out of scope. See [deployment](docs/deployment.md).

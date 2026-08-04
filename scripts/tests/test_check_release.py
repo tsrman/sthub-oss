@@ -125,9 +125,17 @@ class ReleaseHygieneTests(TestCase):
                 "design/export.zip": "",
                 ".env": "SECRET=value\n",
                 "docs/superpowers/plans/internal.md": "",
+                "docs/plans/2026-01-01-feature.md": "",
             }
         )
-        self.assertEqual(len(findings), 5)
+        self.assertEqual(len(findings), 6)
+        self.assertEqual(
+            {finding.reason for finding in findings if finding.path.startswith("docs/")},
+            {"internal planning documentation"},
+        )
+
+    def test_allows_published_design_rationale(self):
+        self.assertEqual(self.scan({"docs/designs/dependency-security.md": "# Goal\n"}), [])
 
     def test_rejects_root_internal_task_report(self):
         findings = self.scan({"task-8-report.md": "internal\n"})

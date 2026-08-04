@@ -156,7 +156,9 @@ def _path_finding(relative: Path) -> str | None:
     excluded = next((part for part in parts if part in EXCLUDED_PARTS), None)
     if excluded is not None:
         return f"excluded path part: {excluded}"
-    if parts[:2] == ("docs", "superpowers"):
+    # Agent-generated implementation plans carry tooling vocabulary and unchecked
+    # task boxes that read as unfinished work. Rationale belongs in docs/designs/.
+    if parts[:2] in {("docs", "superpowers"), ("docs", "plans")}:
         return "internal planning documentation"
     if relative.name in {"AGENTS.md", "review.md", "dev_log.md"}:
         return f"private repository file: {relative.name}"
