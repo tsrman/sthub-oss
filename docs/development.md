@@ -62,3 +62,12 @@ python3 -m unittest scripts.tests.test_check_release scripts.tests.test_verify_c
 python3 scripts/check_release.py .
 git diff --check
 ```
+
+```bash
+python3 -m pip install pip-audit==2.10.1
+pip-audit -r backend/requirements.txt
+pip-audit -r streamlit-base/requirements.txt
+```
+
+All Streamlit-base direct dependencies must remain exactly pinned, and a
+dependency update requires a clean base-image build.

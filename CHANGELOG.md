@@ -6,6 +6,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Upgraded vulnerable Streamlit application-runtime packages and added blocking
+  dependency audits plus Dependabot coverage for the base image requirements.
+
 ## [0.1.0] - 2026-08-04
 
 Initial public release.

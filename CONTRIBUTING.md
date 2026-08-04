@@ -15,4 +15,5 @@ Install backend dependencies with `cd backend && python3 -m venv .venv && . .ven
 | Frontend | `npm run lint`, `npm test`, and `npm run build` from `frontend`. |
 | Compose/networking | Render both Compose files and run `scripts/verify_compose.py`. |
 | E2E | Build the base image, start Compose, then `npm test` from `e2e`. |
+| Python dependencies | Run `pip-audit -r backend/requirements.txt` and `pip-audit -r streamlit-base/requirements.txt`; base-image changes also require a clean `streamlit-base` Docker build. |
 | Release files | `python3 scripts/check_release.py .` and `git diff --check`. |
