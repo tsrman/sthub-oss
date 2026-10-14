@@ -8,6 +8,6 @@
     "screenshot": "node capture-screenshot.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.64.0"
   }
 }
